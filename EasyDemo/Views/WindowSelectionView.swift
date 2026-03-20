@@ -49,14 +49,14 @@ struct WindowSelectionView: View {
                     Text("Screen Recording Permission Required")
                         .font(.headline)
 
-                    Text("Please grant screen recording permission to continue")
+                    Text("Grant screen recording permission in System Settings, then switch back here")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
 
-                    Button("Grant Permission") {
+                    Button("Open System Settings") {
                         Task {
-                            await viewModel.windowCapture.requestScreenRecordingPermission()
+                            await viewModel.requestPermissionAndLoadSources()
                         }
                     }
                     .buttonStyle(.borderedProminent)

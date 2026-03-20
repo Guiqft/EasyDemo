@@ -16,12 +16,26 @@ class WindowSelectionViewModel: ObservableObject {
     @Published var isRefreshing = false
 
     let windowCapture = WindowCapture()
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
+        // Re-check permissions when the app becomes active (e.g. after returning from System Settings)
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task {
+                    let hadPermission = self.windowCapture.hasScreenRecordingPermission
+                    await self.windowCapture.checkScreenRecordingPermission()
+                    if !hadPermission && self.windowCapture.hasScreenRecordingPermission {
+                        await self.refreshWindows()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
         Task {
-            // Wait for permission check to complete first
             await windowCapture.checkScreenRecordingPermission()
-            // Then automatically load windows if permission is granted
             if windowCapture.hasScreenRecordingPermission {
                 await refreshWindows()
             }
@@ -32,6 +46,12 @@ class WindowSelectionViewModel: ObservableObject {
         isRefreshing = true
         await windowCapture.enumerateWindows()
         isRefreshing = false
+    }
+
+    func requestPermissionAndLoadSources() async {
+        // Open System Settings directly instead of triggering the system dialog,
+        // which has a "Quit & Reopen" button that doesn't work with modal sheets.
+        PermissionManager.shared.openSystemSettings(for: .screenRecording)
     }
 
     func selectWindow(_ window: WindowInfo) {
