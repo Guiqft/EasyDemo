@@ -6,9 +6,12 @@ import Combine
 
 @MainActor
 class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
+    static let shared = RecordingEngine()
+
     @Published var isRecording = false
     @Published var recordingDuration: TimeInterval = 0
     @Published var error: Error?
+    @Published var lastRecordingResult: RecordingResult?
 
     private var stream: SCStream?
     private var assetWriter: AVAssetWriter?
@@ -84,6 +87,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
             let currentTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 600)
             self.recordingDuration = CMTimeGetSeconds(CMTimeSubtract(currentTime, startTime))
         }
+
+        StatusBarManager.shared.show()
     }
 
     func stopRecording() async -> RecordingResult? {
@@ -125,18 +130,20 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
 
         let fileSize = getFileSize(at: url)
 
-        return RecordingResult(
+        let result = RecordingResult(
             fileURL: url,
             duration: finalDuration,
             fileSize: fileSize,
             timestamp: Date()
         )
+        self.lastRecordingResult = result
+        return result
     }
 
     private func cleanup() {
         // Stop accessing security-scoped resource
         outputDirectoryManager?.stopAccessing()
-        
+
         self.stream = nil
         self.assetWriter = nil
         self.videoInput = nil
@@ -145,6 +152,8 @@ class RecordingEngine: NSObject, ObservableObject, SCStreamOutput {
         self.startTime = nil
         self.isRecording = false
         self.outputDirectoryManager = nil
+
+        StatusBarManager.shared.hide()
     }
 
     private func getFileSize(at url: URL) -> Int64 {

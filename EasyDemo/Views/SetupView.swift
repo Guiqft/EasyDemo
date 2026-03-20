@@ -24,7 +24,7 @@ struct SetupView: View {
     @State private var recordingResult: RecordingResult?
     @State private var showingFolderPicker = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @StateObject private var recordingEngine = RecordingEngine()
+    @StateObject private var recordingEngine = RecordingEngine.shared
     @StateObject private var outputDirectoryManager = OutputDirectoryManager()
 
     enum SidebarSection: Hashable {
@@ -347,8 +347,7 @@ struct SetupView: View {
 
                             Button {
                                 Task {
-                                    let result = await recordingEngine.stopRecording()
-                                    recordingResult = result
+                                    await recordingEngine.stopRecording()
                                 }
                             } label: {
                                 Label("Stop Recording", systemImage: "stop.circle.fill")
@@ -410,6 +409,11 @@ struct SetupView: View {
                 }
             case .failure(let error):
                 print("Failed to select folder: \(error)")
+            }
+        }
+        .onChange(of: recordingEngine.lastRecordingResult?.id) {
+            if let result = recordingEngine.lastRecordingResult {
+                recordingResult = result
             }
         }
     }
