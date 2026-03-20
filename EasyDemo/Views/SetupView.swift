@@ -9,9 +9,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
 
-/// Main setup view orchestrating window selection, background choice, and preview
+/// Main setup view orchestrating source selection, background choice, and preview
 struct SetupView: View {
-    @State private var selectedWindow: WindowInfo?
+    @State private var selectedSource: CaptureSource?
     @State private var selectedBackground: BackgroundStyle = BackgroundStyle.defaultBigSur
     @State private var webcamConfig = WebcamConfiguration.default
     @State private var audioConfig = AudioConfiguration.default
@@ -36,6 +36,10 @@ struct SetupView: View {
         case output
     }
 
+    private var isDisplayCapture: Bool {
+        selectedSource?.isDisplay ?? false
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // Sidebar with setup options
@@ -44,16 +48,29 @@ struct SetupView: View {
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             // Main preview area
-            if let window = selectedWindow {
-                WindowPreviewView(
-                    window: window,
-                    backgroundStyle: selectedBackground,
-                    webcamConfig: webcamConfig,
-                    windowScale: windowScale
-                )
-                .id(window.id)  // Force recreation when window changes
-                .navigationTitle("Preview")
-                .toolbar(removing: .sidebarToggle)
+            if let source = selectedSource {
+                switch source {
+                case .window(let window):
+                    WindowPreviewView(
+                        window: window,
+                        backgroundStyle: selectedBackground,
+                        webcamConfig: webcamConfig,
+                        windowScale: windowScale
+                    )
+                    .id(source.id)
+                    .navigationTitle("Preview")
+                    .toolbar(removing: .sidebarToggle)
+                case .display(let display):
+                    DisplayPreviewView(
+                        display: display,
+                        backgroundStyle: selectedBackground,
+                        webcamConfig: webcamConfig,
+                        displayScale: windowScale
+                    )
+                    .id(source.id)
+                    .navigationTitle("Preview")
+                    .toolbar(removing: .sidebarToggle)
+                }
             } else {
                 emptyPreviewState
                     .toolbar(removing: .sidebarToggle)
@@ -76,14 +93,14 @@ struct SetupView: View {
     @ViewBuilder
     private var setupSidebar: some View {
         List {
-            Section("Window Selection") {
-                if let window = selectedWindow {
+            Section("Source Selection") {
+                if let source = selectedSource {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(window.displayName)
+                            Text(source.displayName)
                                 .font(.headline)
 
-                            Text("\(Int(window.bounds.width)) × \(Int(window.bounds.height))")
+                            Text("\(Int(source.bounds.width)) x \(Int(source.bounds.height))")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -97,15 +114,15 @@ struct SetupView: View {
                         .disabled(recordingEngine.isRecording)
                     }
                 } else {
-                    Button("Select Window") {
+                    Button("Select Source") {
                         showingWindowSelector = true
                     }
                     .disabled(recordingEngine.isRecording)
                 }
             }
 
-            if selectedWindow != nil {
-                Section("Window Size") {
+            if selectedSource != nil {
+                Section(isDisplayCapture ? "Display Scale" : "Window Size") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Scale:")
@@ -356,9 +373,9 @@ struct SetupView: View {
                         }
                     } else {
                         Button {
-                            if let window = selectedWindow {
+                            if let source = selectedSource {
                                 let config = RecordingConfiguration.default(
-                                    window: window,
+                                    source: source,
                                     background: selectedBackground,
                                     webcam: webcamConfig,
                                     audio: audioConfig,
@@ -382,7 +399,7 @@ struct SetupView: View {
                         } label: {
                             Label("Start Recording", systemImage: "record.circle")
                         }
-                        .disabled(selectedWindow == nil)
+                        .disabled(selectedSource == nil)
                     }
                 }
             }
@@ -392,7 +409,7 @@ struct SetupView: View {
         }
         .navigationTitle("Setup")
         .sheet(isPresented: $showingWindowSelector) {
-            WindowSelectorSheet(selectedWindow: $selectedWindow)
+            WindowSelectorSheet(selectedSource: $selectedSource)
         }
         .sheet(item: $recordingResult) { result in
             RecordingCompletedView(result: result, outputDirectoryManager: outputDirectoryManager)
@@ -424,11 +441,11 @@ struct SetupView: View {
                 .font(.system(size: 64))
                 .foregroundColor(.secondary)
 
-            Text("Select a window to preview")
+            Text("Select a source to preview")
                 .font(.title2)
                 .foregroundColor(.secondary)
 
-            Button("Choose Window") {
+            Button("Choose Source") {
                 showingWindowSelector = true
             }
             .buttonStyle(.borderedProminent)
@@ -440,7 +457,7 @@ struct SetupView: View {
         let seconds = Int(duration) % 60
         return String(format: "%02d:%02d", minutes, seconds)
     }
-    
+
     private func toggleSidebar() {
         withAnimation {
             if columnVisibility == .all {
@@ -452,17 +469,17 @@ struct SetupView: View {
     }
 }
 
-/// Sheet for window selection
+/// Sheet for source selection
 struct WindowSelectorSheet: View {
-    @Binding var selectedWindow: WindowInfo?
+    @Binding var selectedSource: CaptureSource?
     @Environment(\.dismiss) private var dismiss
-    @State private var tempSelection: WindowInfo?
+    @State private var tempSelection: CaptureSource?
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Select Window")
+                Text("Select Source")
                     .font(.title2)
                     .fontWeight(.semibold)
 
@@ -481,8 +498,8 @@ struct WindowSelectorSheet: View {
 
             Divider()
 
-            // Window list
-            WindowSelectionView(selectedWindow: $tempSelection)
+            // Source list
+            WindowSelectionView(selectedSource: $tempSelection)
 
             Divider()
 
@@ -496,7 +513,7 @@ struct WindowSelectorSheet: View {
                 .keyboardShortcut(.cancelAction)
 
                 Button("Select") {
-                    selectedWindow = tempSelection
+                    selectedSource = tempSelection
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
